@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: campus_postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: campus_admin
+      POSTGRES_PASSWORD: dev_password
+      POSTGRES_DB: campus_scheduling
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U campus_admin -d campus_scheduling"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:

@@ -7,6 +7,7 @@ import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './jwt.strategy';
 import { User } from '../../database/entities/user.entity';
+import { Teacher } from '../../database/entities/teacher.entity';
 
 @Module({
   imports: [
@@ -19,7 +20,7 @@ import { User } from '../../database/entities/user.entity';
         signOptions: { expiresIn: config.get('JWT_EXPIRES_IN', '1h') },
       }),
     }),
-    TypeOrmModule.forFeature([User]),
+    TypeOrmModule.forFeature([User, Teacher]),
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy],

@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, DataSource } from 'typeorm';
 import { ScheduleChange } from '../../database/entities/schedule-change.entity';
 import { Schedule } from '../../database/entities/schedule.entity';
 import { ScheduleHistory } from '../../database/entities/schedule-history.entity';
@@ -19,6 +19,7 @@ export class ScheduleChangesService {
     @InjectRepository(ScheduleHistory)
     private readonly historyRepo: Repository<ScheduleHistory>,
     private readonly notificationsService: NotificationsService,
+    private readonly dataSource: DataSource,
   ) {}
 
   async create(dto: CreateScheduleChangeDto, requesterId: string): Promise<ScheduleChange> {
@@ -74,54 +75,64 @@ export class ScheduleChangesService {
   async approve(id: string, approverId: string): Promise<ScheduleChange> {
     const change = await this.changeRepo.findOne({
       where: { id },
-      relations: ['schedule', 'schedule.coursePlan', 'schedule.coursePlan.teacher', 'requester'],
+      relations: ['schedule', 'schedule.coursePlan', 'schedule.coursePlan.teacher', 'schedule.coursePlan.course', 'schedule.room', 'requester'],
     });
     if (!change) throw new NotFoundException('Schedule change request not found');
     if (change.status !== ChangeStatus.PENDING) {
       throw new BadRequestException('This request has already been processed');
     }
 
-    // Update the schedule
-    await this.scheduleRepo.update(change.schedule_id, {
-      room_id: change.new_room_id,
-      day_of_week: change.new_day_of_week,
-      period: change.new_period,
-      week_start: change.new_week_start,
-      week_end: change.new_week_end,
+    await this.dataSource.transaction(async (manager) => {
+      const schedule = change.schedule;
+
+      // Archive full current state before modification
+      await manager.save(ScheduleHistory, manager.getRepository(ScheduleHistory).create({
+        schedule_id: change.schedule_id,
+        action: 'change_approved',
+        changed_by: approverId,
+        changed_at: new Date(),
+        snapshot_json: {
+          change_request_id: change.id,
+          reason: change.reason,
+          before: {
+            room_id: schedule.room_id,
+            room_name: schedule.room?.name,
+            day_of_week: schedule.day_of_week,
+            period: schedule.period,
+            week_start: schedule.week_start,
+            week_end: schedule.week_end,
+            version: schedule.version,
+            course_plan_id: schedule.course_plan_id,
+            course_name: schedule.coursePlan?.course?.name,
+            teacher_name: schedule.coursePlan?.teacher?.name,
+          },
+          after: {
+            room_id: change.new_room_id,
+            day_of_week: change.new_day_of_week,
+            period: change.new_period,
+            week_start: change.new_week_start,
+            week_end: change.new_week_end,
+          },
+        },
+      }));
+
+      // Update the schedule (keep original record, update fields)
+      await manager.update(Schedule, change.schedule_id, {
+        room_id: change.new_room_id,
+        day_of_week: change.new_day_of_week,
+        period: change.new_period,
+        week_start: change.new_week_start,
+        week_end: change.new_week_end,
+      });
+
+      // Update change status
+      change.status = ChangeStatus.APPROVED;
+      change.approver_id = approverId;
+      change.approved_at = new Date();
+      await manager.save(ScheduleChange, change);
     });
 
-    // Record history
-    await this.historyRepo.save(this.historyRepo.create({
-      schedule_id: change.schedule_id,
-      action: 'change_approved',
-      changed_by: approverId,
-      changed_at: new Date(),
-      snapshot_json: {
-        original: {
-          room_id: change.original_room_id,
-          day_of_week: change.original_day_of_week,
-          period: change.original_period,
-          week_start: change.original_week_start,
-          week_end: change.original_week_end,
-        },
-        new: {
-          room_id: change.new_room_id,
-          day_of_week: change.new_day_of_week,
-          period: change.new_period,
-          week_start: change.new_week_start,
-          week_end: change.new_week_end,
-        },
-        reason: change.reason,
-      },
-    }));
-
-    // Update change status
-    change.status = ChangeStatus.APPROVED;
-    change.approver_id = approverId;
-    change.approved_at = new Date();
-    const saved = await this.changeRepo.save(change);
-
-    // Notify requester
+    // Notify requester (outside transaction - non-critical)
     await this.notificationsService.send(
       change.requester_id,
       '调课申请已通过',
@@ -129,7 +140,7 @@ export class ScheduleChangesService {
       'approval',
     );
 
-    return saved;
+    return change;
   }
 
   async reject(id: string, approverId: string, rejectReason?: string): Promise<ScheduleChange> {

@@ -1,7 +1,8 @@
 import api from './api';
 
 export const schedulesService = {
-  getAll: (params?: any) => api.get('/schedules', { params }),
+  getAll: (params?: { semester?: string; teacherId?: string; classId?: string; roomId?: string; limit?: number }) =>
+    api.get('/schedules', { params }),
   getOne: (id: string) => api.get(`/schedules/${id}`),
   create: (data: any) => api.post('/schedules', data),
   update: (id: string, data: any) => api.patch(`/schedules/${id}`, data),

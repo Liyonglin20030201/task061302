@@ -4,14 +4,17 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { User } from '../../database/entities/user.entity';
+import { Teacher } from '../../database/entities/teacher.entity';
 import { LoginDto } from './dto/login.dto';
-import { UserStatus } from '../../database/entities/enums';
+import { UserStatus, UserRole } from '../../database/entities/enums';
 
 @Injectable()
 export class AuthService {
   constructor(
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
+    @InjectRepository(Teacher)
+    private readonly teacherRepo: Repository<Teacher>,
     private readonly jwtService: JwtService,
   ) {}
 
@@ -33,7 +36,13 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    const payload = { sub: user.id, username: user.username, role: user.role };
+    let teacherId: string | undefined;
+    if (user.role === UserRole.TEACHER) {
+      const teacher = await this.teacherRepo.findOne({ where: { user_id: user.id } });
+      teacherId = teacher?.id;
+    }
+
+    const payload = { sub: user.id, username: user.username, role: user.role, teacherId };
     const accessToken = this.jwtService.sign(payload);
     const refreshToken = this.jwtService.sign(payload, { expiresIn: '7d' });
 
@@ -44,6 +53,7 @@ export class AuthService {
         id: user.id,
         username: user.username,
         role: user.role,
+        teacherId,
       },
     };
   }
@@ -55,7 +65,14 @@ export class AuthService {
       if (!user || user.status !== UserStatus.ACTIVE) {
         throw new UnauthorizedException('Invalid token');
       }
-      const newPayload = { sub: user.id, username: user.username, role: user.role };
+
+      let teacherId: string | undefined;
+      if (user.role === UserRole.TEACHER) {
+        const teacher = await this.teacherRepo.findOne({ where: { user_id: user.id } });
+        teacherId = teacher?.id;
+      }
+
+      const newPayload = { sub: user.id, username: user.username, role: user.role, teacherId };
       return {
         accessToken: this.jwtService.sign(newPayload),
         refreshToken: this.jwtService.sign(newPayload, { expiresIn: '7d' }),
@@ -68,18 +85,26 @@ export class AuthService {
   async getProfile(userId: string) {
     const user = await this.userRepo.findOne({ where: { id: userId } });
     if (!user) throw new UnauthorizedException('User not found');
+
+    let teacherId: string | undefined;
+    if (user.role === UserRole.TEACHER) {
+      const teacher = await this.teacherRepo.findOne({ where: { user_id: user.id } });
+      teacherId = teacher?.id;
+    }
+
     return {
       id: user.id,
       username: user.username,
       role: user.role,
       status: user.status,
+      teacherId,
       createdAt: user.created_at,
     };
   }
 
-  async validateUser(payload: { sub: string; username: string; role: string }) {
+  async validateUser(payload: { sub: string; username: string; role: string; teacherId?: string }) {
     const user = await this.userRepo.findOne({ where: { id: payload.sub } });
     if (!user || user.status !== UserStatus.ACTIVE) return null;
-    return { id: user.id, username: user.username, role: user.role };
+    return { id: user.id, username: user.username, role: user.role, teacherId: payload.teacherId };
   }
 }

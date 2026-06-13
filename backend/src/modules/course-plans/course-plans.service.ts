@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CoursePlan } from '../../database/entities/course-plan.entity';
@@ -78,13 +78,29 @@ export class CoursePlansService {
   }
 
   async update(id: string, dto: UpdateCoursePlanDto): Promise<CoursePlan> {
-    const plan = await this.findOne(id);
-    if (dto.semester !== undefined) plan.semester = dto.semester;
-    if (dto.courseId !== undefined) plan.course_id = dto.courseId;
-    if (dto.teacherId !== undefined) plan.teacher_id = dto.teacherId;
-    if (dto.classId !== undefined) plan.class_id = dto.classId;
-    if (dto.plannedHours !== undefined) plan.planned_hours = dto.plannedHours;
-    return this.coursePlanRepository.save(plan);
+    const { version, ...fields } = dto;
+
+    const updateData: Record<string, any> = {};
+    if (fields.semester !== undefined) updateData.semester = fields.semester;
+    if (fields.courseId !== undefined) updateData.course_id = fields.courseId;
+    if (fields.teacherId !== undefined) updateData.teacher_id = fields.teacherId;
+    if (fields.classId !== undefined) updateData.class_id = fields.classId;
+    if (fields.plannedHours !== undefined) updateData.planned_hours = fields.plannedHours;
+
+    const result = await this.coursePlanRepository
+      .createQueryBuilder()
+      .update(CoursePlan)
+      .set(updateData)
+      .where('id = :id AND version = :version', { id, version })
+      .execute();
+
+    if (result.affected === 0) {
+      throw new ConflictException(
+        '该课程计划已被其他用户修改，请刷新后重试。',
+      );
+    }
+
+    return this.findOne(id);
   }
 
   async remove(id: string): Promise<void> {

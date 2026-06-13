@@ -27,13 +27,29 @@ export default function CoursePlansPage() {
   const { data: classesData } = useQuery({ queryKey: ['classes'], queryFn: () => classesService.getAll() });
 
   const mutation = useMutation({
-    mutationFn: (values: any) => editing ? coursePlansService.update(editing.id, values) : coursePlansService.create(values),
+    mutationFn: (values: any) => {
+      if (editing) {
+        return coursePlansService.update(editing.id, { ...values, version: editing.version });
+      }
+      return coursePlansService.create(values);
+    },
     onSuccess: () => {
       message.success(editing ? '更新成功' : '创建成功');
       queryClient.invalidateQueries({ queryKey: ['course-plans'] });
       setOpen(false);
     },
-    onError: (err: any) => message.error(err?.message || '操作失败'),
+    onError: (err: any) => {
+      if (err?.code === 409 || err?.statusCode === 409) {
+        Modal.error({
+          title: '并发冲突',
+          content: '该课程计划已被其他用户修改，请关闭后重新编辑。',
+          onOk: () => queryClient.invalidateQueries({ queryKey: ['course-plans'] }),
+        });
+        setOpen(false);
+      } else {
+        message.error(err?.message || '操作失败');
+      }
+    },
   });
 
   const deleteMutation = useMutation({

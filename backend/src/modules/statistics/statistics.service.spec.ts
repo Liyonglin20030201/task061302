@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { DataSource } from 'typeorm';
 import { StatisticsService } from './statistics.service';
 import { Schedule } from '../../database/entities/schedule.entity';
 import { CoursePlan } from '../../database/entities/course-plan.entity';
@@ -8,13 +9,10 @@ import { Teacher } from '../../database/entities/teacher.entity';
 
 describe('StatisticsService', () => {
   let service: StatisticsService;
-  let mockScheduleRepo: any;
-  let mockPlanRepo: any;
-  let mockRoomRepo: any;
-  let mockTeacherRepo: any;
+  let mockQb: any;
 
   beforeEach(async () => {
-    const mockQb = {
+    mockQb = {
       leftJoin: jest.fn().mockReturnThis(),
       leftJoinAndSelect: jest.fn().mockReturnThis(),
       select: jest.fn().mockReturnThis(),
@@ -27,20 +25,28 @@ describe('StatisticsService', () => {
       getRawMany: jest.fn().mockResolvedValue([]),
     };
 
-    mockScheduleRepo = {
+    const mockManager = {
+      count: jest.fn().mockImplementation((entity, opts?: any) => {
+        if (entity === TrainingRoom) return Promise.resolve(5);
+        if (entity === Teacher) return Promise.resolve(3);
+        if (entity === CoursePlan) return Promise.resolve(opts?.where?.semester ? 2 : 5);
+        return Promise.resolve(0);
+      }),
       createQueryBuilder: jest.fn().mockReturnValue(mockQb),
     };
-    mockPlanRepo = { count: jest.fn().mockResolvedValue(5) };
-    mockRoomRepo = { count: jest.fn().mockResolvedValue(5) };
-    mockTeacherRepo = { count: jest.fn().mockResolvedValue(3) };
+
+    const mockDataSource = {
+      transaction: jest.fn().mockImplementation((_isolation: any, cb: any) => cb(mockManager)),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         StatisticsService,
-        { provide: getRepositoryToken(Schedule), useValue: mockScheduleRepo },
-        { provide: getRepositoryToken(CoursePlan), useValue: mockPlanRepo },
-        { provide: getRepositoryToken(TrainingRoom), useValue: mockRoomRepo },
-        { provide: getRepositoryToken(Teacher), useValue: mockTeacherRepo },
+        { provide: getRepositoryToken(Schedule), useValue: {} },
+        { provide: getRepositoryToken(CoursePlan), useValue: {} },
+        { provide: getRepositoryToken(TrainingRoom), useValue: {} },
+        { provide: getRepositoryToken(Teacher), useValue: {} },
+        { provide: DataSource, useValue: mockDataSource },
       ],
     }).compile();
 
@@ -59,16 +65,14 @@ describe('StatisticsService', () => {
     });
 
     it('should filter by semester when provided', async () => {
-      mockPlanRepo.count.mockResolvedValue(2);
       const result = await service.getOverview('2024-2025-1');
-      expect(mockPlanRepo.count).toHaveBeenCalledWith({ where: { semester: '2024-2025-1' } });
+      expect(result.totalPlans).toBe(2);
     });
   });
 
   describe('getRoomUtilization', () => {
     it('should calculate utilization rate correctly', async () => {
-      const qb = mockScheduleRepo.createQueryBuilder();
-      qb.getRawMany.mockResolvedValue([
+      mockQb.getRawMany.mockResolvedValue([
         { roomId: 'room-1', roomName: 'Lab A', building: '实训楼', scheduledPeriods: '25' },
       ]);
 
@@ -85,8 +89,7 @@ describe('StatisticsService', () => {
 
   describe('getTeacherWorkload', () => {
     it('should return workload with weekly hours calculation', async () => {
-      const qb = mockScheduleRepo.createQueryBuilder();
-      qb.getRawMany.mockResolvedValue([
+      mockQb.getRawMany.mockResolvedValue([
         { teacherId: 't-1', teacherName: '张三', department: '计算机系', totalPeriods: '10', courseCount: '3' },
       ]);
 
@@ -98,8 +101,7 @@ describe('StatisticsService', () => {
 
   describe('getClassHours', () => {
     it('should return class hours with weekly calculation', async () => {
-      const qb = mockScheduleRepo.createQueryBuilder();
-      qb.getRawMany.mockResolvedValue([
+      mockQb.getRawMany.mockResolvedValue([
         { classId: 'c-1', className: '计算机2024-1班', major: '计算机科学', totalPeriods: '15' },
       ]);
 

@@ -1,4 +1,4 @@
-import { Entity, Column, ManyToOne, JoinColumn } from 'typeorm';
+import { Entity, Column, ManyToOne, JoinColumn, VersionColumn } from 'typeorm';
 import { BaseEntity } from './base.entity';
 import { Course } from './course.entity';
 import { Teacher } from './teacher.entity';
@@ -7,6 +7,8 @@ import { PlanStatus } from './enums';
 
 @Entity('course_plans')
 export class CoursePlan extends BaseEntity {
+  @VersionColumn({ comment: '乐观锁版本号' })
+  version: number;
   @Column({ type: 'varchar', length: 20, comment: '学期 (如: 2024-2025-1)' })
   semester: string;
 

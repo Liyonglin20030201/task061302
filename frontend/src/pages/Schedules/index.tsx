@@ -3,6 +3,7 @@ import { Card, Button, Select, Space, Table, Tag, Modal, Form, Input, message, A
 import { ThunderboltOutlined } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { schedulesService } from '../../services/schedules.service';
+import { teachersService } from '../../services/teachers.service';
 import { useAuthStore } from '../../store/useAuthStore';
 
 const dayNames = ['', '周一', '周二', '周三', '周四', '周五', '周六', '周日'];
@@ -10,14 +11,21 @@ const periodNames = Array.from({ length: 12 }, (_, i) => `第${i + 1}节`);
 
 export default function SchedulesPage() {
   const [semester, setSemester] = useState('2025-2026-1');
+  const [selectedTeacherId, setSelectedTeacherId] = useState<string | undefined>(undefined);
   const [autoOpen, setAutoOpen] = useState(false);
   const [autoForm] = Form.useForm();
   const queryClient = useQueryClient();
   const isAdmin = useAuthStore((s) => s.user?.role === 'admin');
 
+  const { data: teachersData } = useQuery({
+    queryKey: ['teachers'],
+    queryFn: () => teachersService.getAll(),
+    enabled: isAdmin,
+  });
+
   const { data, isLoading } = useQuery({
-    queryKey: ['schedules', semester],
-    queryFn: () => schedulesService.getAll({ semester, limit: 200 }),
+    queryKey: ['schedules', semester, selectedTeacherId],
+    queryFn: () => schedulesService.getAll({ semester, teacherId: selectedTeacherId, limit: 200 }),
   });
 
   const autoMutation = useMutation({
@@ -35,6 +43,7 @@ export default function SchedulesPage() {
   });
 
   const schedules = (data as any)?.data?.data || (data as any)?.data || [];
+  const teachers = (teachersData as any)?.data?.data || (teachersData as any)?.data || [];
 
   // Build timetable grid
   const grid: Record<string, any[]> = {};
@@ -74,6 +83,16 @@ export default function SchedulesPage() {
               { value: '2025-2026-2', label: '2025-2026 第二学期' },
             ]}
           />
+          {isAdmin && (
+            <Select
+              value={selectedTeacherId}
+              onChange={setSelectedTeacherId}
+              style={{ width: 180 }}
+              allowClear
+              placeholder="全部教师"
+              options={teachers.map((t: any) => ({ value: t.id, label: `${t.name} (${t.employeeNo})` }))}
+            />
+          )}
         </Space>
         {isAdmin && (
           <Button type="primary" icon={<ThunderboltOutlined />} onClick={() => { autoForm.setFieldsValue({ semester }); setAutoOpen(true); }}>

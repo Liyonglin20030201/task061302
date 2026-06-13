@@ -43,10 +43,13 @@ export class SchedulesController {
     @Query('teacherId') teacherId?: string,
     @Query('classId') classId?: string,
     @Query('roomId') roomId?: string,
+    @CurrentUser() user?: any,
   ) {
+    // Teacher role can only view their own schedules
+    const effectiveTeacherId = user?.role === 'teacher' ? user.teacherId : teacherId;
     const result = await this.schedulesService.findAll(pagination, {
       semester,
-      teacherId,
+      teacherId: effectiveTeacherId,
       classId,
       roomId,
     });

@@ -5,6 +5,7 @@ interface User {
   id: string;
   username: string;
   role: 'admin' | 'teacher' | 'student';
+  teacherId?: string;
 }
 
 interface AuthState {

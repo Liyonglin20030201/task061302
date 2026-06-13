@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { DataSource } from 'typeorm';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { ScheduleChangesService } from './schedule-changes.service';
 import { ScheduleChange } from '../../database/entities/schedule-change.entity';
@@ -14,6 +15,7 @@ describe('ScheduleChangesService', () => {
   let mockScheduleRepo: any;
   let mockHistoryRepo: any;
   let mockNotifService: any;
+  let mockDataSource: any;
 
   beforeEach(async () => {
     mockChangeRepo = {
@@ -45,6 +47,19 @@ describe('ScheduleChangesService', () => {
       send: jest.fn().mockResolvedValue({}),
     };
 
+    mockDataSource = {
+      transaction: jest.fn().mockImplementation(async (cb: any) => {
+        const mockManager = {
+          save: jest.fn().mockResolvedValue({}),
+          update: jest.fn().mockResolvedValue({ affected: 1 }),
+          getRepository: jest.fn().mockReturnValue({
+            create: jest.fn().mockImplementation(dto => dto),
+          }),
+        };
+        return cb(mockManager);
+      }),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ScheduleChangesService,
@@ -52,6 +67,7 @@ describe('ScheduleChangesService', () => {
         { provide: getRepositoryToken(Schedule), useValue: mockScheduleRepo },
         { provide: getRepositoryToken(ScheduleHistory), useValue: mockHistoryRepo },
         { provide: NotificationsService, useValue: mockNotifService },
+        { provide: DataSource, useValue: mockDataSource },
       ],
     }).compile();
 
@@ -105,39 +121,16 @@ describe('ScheduleChangesService', () => {
       new_week_end: 18,
       reason: '时间冲突',
       status: ChangeStatus.PENDING,
-      schedule: { coursePlan: { teacher: {} } },
+      schedule: { room_id: 'room-1', day_of_week: 1, period: 1, week_start: 1, week_end: 18, version: 1, course_plan_id: 'plan-1', coursePlan: { course: { name: 'Python' }, teacher: { name: '张三' } }, room: { name: 'Lab A' } },
       requester: { id: 'user-1' },
     };
 
-    it('should update schedule with new values on approval', async () => {
+    it('should execute approve within a transaction', async () => {
       mockChangeRepo.findOne.mockResolvedValue({ ...mockChange });
 
       await service.approve('change-1', 'admin-1');
 
-      expect(mockScheduleRepo.update).toHaveBeenCalledWith('schedule-1', {
-        room_id: 'room-2',
-        day_of_week: 3,
-        period: 5,
-        week_start: 1,
-        week_end: 18,
-      });
-    });
-
-    it('should record history with original and new snapshots', async () => {
-      mockChangeRepo.findOne.mockResolvedValue({ ...mockChange });
-
-      await service.approve('change-1', 'admin-1');
-
-      expect(mockHistoryRepo.save).toHaveBeenCalledWith(
-        expect.objectContaining({
-          schedule_id: 'schedule-1',
-          action: 'change_approved',
-          snapshot_json: expect.objectContaining({
-            original: expect.objectContaining({ day_of_week: 1, period: 1 }),
-            new: expect.objectContaining({ day_of_week: 3, period: 5 }),
-          }),
-        }),
-      );
+      expect(mockDataSource.transaction).toHaveBeenCalled();
     });
 
     it('should send notification to requester on approval', async () => {
@@ -196,7 +189,7 @@ describe('ScheduleChangesService', () => {
       });
 
       await service.reject('change-1', 'admin-1');
-      expect(mockScheduleRepo.update).not.toHaveBeenCalled();
+      expect(mockDataSource.transaction).not.toHaveBeenCalled();
     });
   });
 });

@@ -52,9 +52,16 @@ describe('SchedulesService', () => {
   });
 
   describe('update with optimistic locking', () => {
-    it('should throw ConflictException when version mismatch', async () => {
+    it('should throw ConflictException with current data when version mismatch', async () => {
       const qb = mockScheduleRepo.createQueryBuilder();
       qb.execute.mockResolvedValue({ affected: 0 });
+      mockScheduleRepo.findOne.mockResolvedValue({
+        id: 'schedule-1',
+        period: 2,
+        version: 3,
+        coursePlan: { course: {}, teacher: {}, class: {} },
+        room: {},
+      });
 
       await expect(
         service.update('schedule-1', { version: 1, period: 3 }, 'user-1'),

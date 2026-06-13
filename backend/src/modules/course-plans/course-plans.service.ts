@@ -95,9 +95,12 @@ export class CoursePlansService {
       .execute();
 
     if (result.affected === 0) {
-      throw new ConflictException(
-        '该课程计划已被其他用户修改，请刷新后重试。',
-      );
+      const current = await this.findOne(id);
+      throw new ConflictException({
+        message: '该课程计划已被其他用户修改，系统将自动重试。',
+        currentVersion: current.version,
+        currentData: current,
+      });
     }
 
     return this.findOne(id);

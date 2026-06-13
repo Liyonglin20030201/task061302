@@ -25,6 +25,9 @@ export class ScheduleHistory extends BaseEntity {
   @Column({ type: 'timestamp', default: () => 'NOW()', comment: '变更时间' })
   changed_at: Date;
 
+  @Column({ type: 'int', default: 0, comment: '排课版本号(操作时)' })
+  schedule_version: number;
+
   @Column({ type: 'jsonb', nullable: true, comment: '快照数据' })
   snapshot_json: Record<string, any>;
 }

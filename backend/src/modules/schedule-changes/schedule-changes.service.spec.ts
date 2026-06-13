@@ -50,6 +50,19 @@ describe('ScheduleChangesService', () => {
     mockDataSource = {
       transaction: jest.fn().mockImplementation(async (cb: any) => {
         const mockManager = {
+          findOne: jest.fn().mockResolvedValue({
+            id: 'schedule-1',
+            room_id: 'room-1',
+            day_of_week: 1,
+            period: 1,
+            week_start: 1,
+            week_end: 18,
+            version: 1,
+            course_plan_id: 'plan-1',
+            status: 'active',
+            coursePlan: { course: { name: 'Python' }, teacher: { name: '张三' }, class: { name: '计算机2024-1' } },
+            room: { name: 'Lab A' },
+          }),
           save: jest.fn().mockResolvedValue({}),
           update: jest.fn().mockResolvedValue({ affected: 1 }),
           getRepository: jest.fn().mockReturnValue({

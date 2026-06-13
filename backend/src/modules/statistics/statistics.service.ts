@@ -30,7 +30,7 @@ export class StatisticsService {
         : await manager.count(CoursePlan);
 
       const scheduleQuery = manager.createQueryBuilder(Schedule, 's')
-        .leftJoin('s.coursePlan', 'cp')
+        .innerJoin('s.coursePlan', 'cp')
         .where('s.status = :status', { status: ScheduleStatus.ACTIVE });
       if (semester) scheduleQuery.andWhere('cp.semester = :semester', { semester });
       const totalSchedules = await scheduleQuery.getCount();
@@ -42,13 +42,14 @@ export class StatisticsService {
   async getRoomUtilization(semester?: string) {
     return this.dataSource.transaction('REPEATABLE READ', async (manager) => {
       const qb = manager.createQueryBuilder(Schedule, 's')
-        .leftJoin('s.room', 'r')
-        .leftJoin('s.coursePlan', 'cp')
+        .innerJoin('s.room', 'r')
+        .innerJoin('s.coursePlan', 'cp')
         .select('r.id', 'roomId')
         .addSelect('r.name', 'roomName')
         .addSelect('r.building', 'building')
-        .addSelect('COUNT(s.id)', 'scheduledPeriods')
+        .addSelect('COALESCE(COUNT(s.id), 0)', 'scheduledPeriods')
         .where('s.status = :status', { status: ScheduleStatus.ACTIVE })
+        .andWhere('r.id IS NOT NULL')
         .groupBy('r.id')
         .addGroupBy('r.name')
         .addGroupBy('r.building');
@@ -62,8 +63,8 @@ export class StatisticsService {
         roomId: r.roomId,
         roomName: r.roomName,
         building: r.building,
-        scheduledPeriods: parseInt(r.scheduledPeriods),
-        utilizationRate: Math.round((parseInt(r.scheduledPeriods) / totalPeriodsPerWeek) * 100 * 100) / 100,
+        scheduledPeriods: parseInt(r.scheduledPeriods) || 0,
+        utilizationRate: Math.round(((parseInt(r.scheduledPeriods) || 0) / totalPeriodsPerWeek) * 100 * 100) / 100,
       }));
     });
   }
@@ -71,14 +72,15 @@ export class StatisticsService {
   async getTeacherWorkload(semester?: string) {
     return this.dataSource.transaction('REPEATABLE READ', async (manager) => {
       const qb = manager.createQueryBuilder(Schedule, 's')
-        .leftJoin('s.coursePlan', 'cp')
-        .leftJoin('cp.teacher', 't')
+        .innerJoin('s.coursePlan', 'cp')
+        .innerJoin('cp.teacher', 't')
         .select('t.id', 'teacherId')
         .addSelect('t.name', 'teacherName')
         .addSelect('t.department', 'department')
-        .addSelect('COUNT(s.id)', 'totalPeriods')
-        .addSelect('COUNT(DISTINCT cp.id)', 'courseCount')
+        .addSelect('COALESCE(COUNT(s.id), 0)', 'totalPeriods')
+        .addSelect('COALESCE(COUNT(DISTINCT cp.id), 0)', 'courseCount')
         .where('s.status = :status', { status: ScheduleStatus.ACTIVE })
+        .andWhere('t.id IS NOT NULL')
         .groupBy('t.id')
         .addGroupBy('t.name')
         .addGroupBy('t.department');
@@ -90,9 +92,9 @@ export class StatisticsService {
         teacherId: r.teacherId,
         teacherName: r.teacherName,
         department: r.department,
-        totalPeriods: parseInt(r.totalPeriods),
-        courseCount: parseInt(r.courseCount),
-        weeklyHours: parseInt(r.totalPeriods) * 2,
+        totalPeriods: parseInt(r.totalPeriods) || 0,
+        courseCount: parseInt(r.courseCount) || 0,
+        weeklyHours: (parseInt(r.totalPeriods) || 0) * 2,
       }));
     });
   }
@@ -100,14 +102,14 @@ export class StatisticsService {
   async getClassHours(semester?: string) {
     return this.dataSource.transaction('REPEATABLE READ', async (manager) => {
       const qb = manager.createQueryBuilder(Schedule, 's')
-        .leftJoin('s.coursePlan', 'cp')
-        .leftJoin('cp.class', 'c')
-        .leftJoin('cp.course', 'course')
+        .innerJoin('s.coursePlan', 'cp')
+        .innerJoin('cp.class', 'c')
         .select('c.id', 'classId')
         .addSelect('c.name', 'className')
         .addSelect('c.major', 'major')
-        .addSelect('COUNT(s.id)', 'totalPeriods')
+        .addSelect('COALESCE(COUNT(s.id), 0)', 'totalPeriods')
         .where('s.status = :status', { status: ScheduleStatus.ACTIVE })
+        .andWhere('c.id IS NOT NULL')
         .groupBy('c.id')
         .addGroupBy('c.name')
         .addGroupBy('c.major');
@@ -119,8 +121,8 @@ export class StatisticsService {
         classId: r.classId,
         className: r.className,
         major: r.major,
-        totalPeriods: parseInt(r.totalPeriods),
-        weeklyHours: parseInt(r.totalPeriods) * 2,
+        totalPeriods: parseInt(r.totalPeriods) || 0,
+        weeklyHours: (parseInt(r.totalPeriods) || 0) * 2,
       }));
     });
   }

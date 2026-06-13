@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { Table, Button, Space, Modal, Form, Input, InputNumber, Select, message, Popconfirm, Tag } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -14,35 +14,54 @@ const statusMap: Record<string, { color: string; text: string }> = {
   scheduled: { color: 'green', text: '已排课' },
 };
 
+const MAX_RETRIES = 3;
+
 export default function CoursePlansPage() {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<any>(null);
   const [form] = Form.useForm();
   const queryClient = useQueryClient();
   const isAdmin = useAuthStore((s) => s.user?.role === 'admin');
+  const retryCountRef = useRef(0);
 
   const { data, isLoading } = useQuery({ queryKey: ['course-plans'], queryFn: () => coursePlansService.getAll() });
   const { data: coursesData } = useQuery({ queryKey: ['courses'], queryFn: () => coursesService.getAll() });
   const { data: teachersData } = useQuery({ queryKey: ['teachers'], queryFn: () => teachersService.getAll() });
   const { data: classesData } = useQuery({ queryKey: ['classes'], queryFn: () => classesService.getAll() });
 
+  const doUpdate = async (values: any, version: number): Promise<any> => {
+    return coursePlansService.update(editing.id, { ...values, version });
+  };
+
   const mutation = useMutation({
-    mutationFn: (values: any) => {
-      if (editing) {
-        return coursePlansService.update(editing.id, { ...values, version: editing.version });
+    mutationFn: async (values: any) => {
+      if (!editing) return coursePlansService.create(values);
+      retryCountRef.current = 0;
+      let currentVersion = editing.version;
+      while (retryCountRef.current < MAX_RETRIES) {
+        try {
+          return await doUpdate(values, currentVersion);
+        } catch (err: any) {
+          const isConflict = err?.code === 409 || err?.statusCode === 409;
+          if (!isConflict || retryCountRef.current >= MAX_RETRIES - 1) throw err;
+          currentVersion = err?.currentVersion ?? err?.data?.currentVersion;
+          if (!currentVersion) throw err;
+          retryCountRef.current++;
+        }
       }
-      return coursePlansService.create(values);
+      throw new Error('重试次数已耗尽');
     },
     onSuccess: () => {
-      message.success(editing ? '更新成功' : '创建成功');
+      const retried = retryCountRef.current > 0;
+      message.success(editing ? `更新成功${retried ? '（已自动合并冲突）' : ''}` : '创建成功');
       queryClient.invalidateQueries({ queryKey: ['course-plans'] });
       setOpen(false);
     },
     onError: (err: any) => {
       if (err?.code === 409 || err?.statusCode === 409) {
-        Modal.error({
+        Modal.warning({
           title: '并发冲突',
-          content: '该课程计划已被其他用户修改，请关闭后重新编辑。',
+          content: '多次自动重试仍失败，该记录正在被频繁修改。请稍后再试。',
           onOk: () => queryClient.invalidateQueries({ queryKey: ['course-plans'] }),
         });
         setOpen(false);

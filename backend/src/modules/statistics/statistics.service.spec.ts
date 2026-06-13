@@ -13,6 +13,7 @@ describe('StatisticsService', () => {
 
   beforeEach(async () => {
     mockQb = {
+      innerJoin: jest.fn().mockReturnThis(),
       leftJoin: jest.fn().mockReturnThis(),
       leftJoinAndSelect: jest.fn().mockReturnThis(),
       select: jest.fn().mockReturnThis(),

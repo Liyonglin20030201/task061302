@@ -84,7 +84,8 @@ export class SchedulesService {
         action: 'created',
         changed_by: userId,
         changed_at: new Date(),
-        snapshot_json: { ...dto, id: saved.id },
+        schedule_version: saved.version || 1,
+        snapshot_json: { ...dto, id: saved.id, status: ScheduleStatus.ACTIVE },
       }),
     );
 
@@ -109,9 +110,12 @@ export class SchedulesService {
       .execute();
 
     if (result.affected === 0) {
-      throw new ConflictException(
-        'Schedule was modified by another user. Please reload and try again.',
-      );
+      const current = await this.findOne(id);
+      throw new ConflictException({
+        message: '该排课已被其他用户修改，系统将自动重试。',
+        currentVersion: current.version,
+        currentData: current,
+      });
     }
 
     const updated = await this.findOne(id);
@@ -122,7 +126,18 @@ export class SchedulesService {
         action: 'updated',
         changed_by: userId,
         changed_at: new Date(),
-        snapshot_json: { ...updated },
+        schedule_version: updated.version,
+        snapshot_json: {
+          id: updated.id,
+          room_id: updated.room_id,
+          day_of_week: updated.day_of_week,
+          period: updated.period,
+          week_start: updated.week_start,
+          week_end: updated.week_end,
+          version: updated.version,
+          status: updated.status,
+          course_plan_id: updated.course_plan_id,
+        },
       }),
     );
 
@@ -140,7 +155,18 @@ export class SchedulesService {
         action: 'cancelled',
         changed_by: userId,
         changed_at: new Date(),
-        snapshot_json: { ...schedule },
+        schedule_version: schedule.version,
+        snapshot_json: {
+          id: schedule.id,
+          room_id: schedule.room_id,
+          day_of_week: schedule.day_of_week,
+          period: schedule.period,
+          week_start: schedule.week_start,
+          week_end: schedule.week_end,
+          version: schedule.version,
+          status: ScheduleStatus.CANCELLED,
+          course_plan_id: schedule.course_plan_id,
+        },
       }),
     );
   }

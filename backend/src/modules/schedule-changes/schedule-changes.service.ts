@@ -83,17 +83,26 @@ export class ScheduleChangesService {
     }
 
     await this.dataSource.transaction(async (manager) => {
-      const schedule = change.schedule;
+      // Re-read schedule inside transaction for consistent version
+      const schedule = await manager.findOne(Schedule, {
+        where: { id: change.schedule_id },
+        relations: ['coursePlan', 'coursePlan.course', 'coursePlan.teacher', 'coursePlan.class', 'room'],
+      });
+      if (!schedule) throw new NotFoundException('Schedule not found in transaction');
 
-      // Archive full current state before modification
+      const versionAtChange = schedule.version;
+
+      // Archive full self-contained before-state (no cross-references)
       await manager.save(ScheduleHistory, manager.getRepository(ScheduleHistory).create({
         schedule_id: change.schedule_id,
         action: 'change_approved',
         changed_by: approverId,
         changed_at: new Date(),
+        schedule_version: versionAtChange,
         snapshot_json: {
           change_request_id: change.id,
           reason: change.reason,
+          approver_id: approverId,
           before: {
             room_id: schedule.room_id,
             room_name: schedule.room?.name,
@@ -101,10 +110,12 @@ export class ScheduleChangesService {
             period: schedule.period,
             week_start: schedule.week_start,
             week_end: schedule.week_end,
-            version: schedule.version,
+            version: versionAtChange,
             course_plan_id: schedule.course_plan_id,
             course_name: schedule.coursePlan?.course?.name,
             teacher_name: schedule.coursePlan?.teacher?.name,
+            class_name: schedule.coursePlan?.class?.name,
+            status: schedule.status,
           },
           after: {
             room_id: change.new_room_id,
@@ -112,6 +123,7 @@ export class ScheduleChangesService {
             period: change.new_period,
             week_start: change.new_week_start,
             week_end: change.new_week_end,
+            version: versionAtChange + 1,
           },
         },
       }));

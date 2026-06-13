@@ -3,6 +3,7 @@ import { Card, Button, Select, Space, Table, Tag, Modal, Form, Input, message, A
 import { ThunderboltOutlined } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { schedulesService } from '../../services/schedules.service';
+import { teachersService } from '../../services/teachers.service';
 import { useAuthStore } from '../../store/useAuthStore';
 
 const dayNames = ['', '周一', '周二', '周三', '周四', '周五', '周六', '周日'];
@@ -10,14 +11,29 @@ const periodNames = Array.from({ length: 12 }, (_, i) => `第${i + 1}节`);
 
 export default function SchedulesPage() {
   const [semester, setSemester] = useState('2025-2026-1');
+  const [selectedTeacherId, setSelectedTeacherId] = useState<string | undefined>(undefined);
   const [autoOpen, setAutoOpen] = useState(false);
   const [autoForm] = Form.useForm();
   const queryClient = useQueryClient();
-  const isAdmin = useAuthStore((s) => s.user?.role === 'admin');
+  const user = useAuthStore((s) => s.user);
+  const isAdmin = user?.role === 'admin';
+
+  // Admin can view any teacher's schedule
+  const { data: teachersData } = useQuery({
+    queryKey: ['teachers'],
+    queryFn: () => teachersService.getAll({ limit: 100 }),
+    enabled: isAdmin,
+  });
+
+  const teachers = (teachersData as any)?.data?.data || (teachersData as any)?.data || [];
 
   const { data, isLoading } = useQuery({
-    queryKey: ['schedules', semester],
-    queryFn: () => schedulesService.getAll({ semester, limit: 200 }),
+    queryKey: ['schedules', semester, selectedTeacherId],
+    queryFn: () => schedulesService.getAll({
+      semester,
+      limit: 200,
+      ...(selectedTeacherId ? { teacherId: selectedTeacherId } : {}),
+    }),
   });
 
   const autoMutation = useMutation({
@@ -36,10 +52,12 @@ export default function SchedulesPage() {
 
   const schedules = (data as any)?.data?.data || (data as any)?.data || [];
 
-  // Build timetable grid
+  // Build timetable grid using snake_case field names from backend
   const grid: Record<string, any[]> = {};
   for (const s of schedules) {
-    const key = `${s.dayOfWeek}-${s.period}`;
+    const day = s.day_of_week || s.dayOfWeek;
+    const period = s.period;
+    const key = `${day}-${period}`;
     if (!grid[key]) grid[key] = [];
     grid[key].push(s);
   }
@@ -74,6 +92,19 @@ export default function SchedulesPage() {
               { value: '2025-2026-2', label: '2025-2026 第二学期' },
             ]}
           />
+          {isAdmin && (
+            <Select
+              value={selectedTeacherId}
+              onChange={setSelectedTeacherId}
+              style={{ width: 180 }}
+              allowClear
+              placeholder="筛选教师课表"
+              options={teachers.map((t: any) => ({
+                value: t.id,
+                label: `${t.name} (${t.employee_no || t.employeeNo})`,
+              }))}
+            />
+          )}
         </Space>
         {isAdmin && (
           <Button type="primary" icon={<ThunderboltOutlined />} onClick={() => { autoForm.setFieldsValue({ semester }); setAutoOpen(true); }}>

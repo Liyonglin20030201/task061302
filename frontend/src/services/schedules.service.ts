@@ -9,4 +9,5 @@ export const schedulesService = {
   autoGenerate: (data: { semester: string; coursePlanIds?: string[] }) =>
     api.post('/schedules/auto-generate', data),
   checkConflicts: (data: any) => api.post('/schedules/check-conflicts', data),
+  getHistory: (id: string) => api.get(`/schedules/${id}/history`),
 };

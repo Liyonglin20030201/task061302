@@ -188,12 +188,4 @@ export class SchedulesService {
       .addOrderBy('s.period', 'ASC')
       .getMany();
   }
-
-  async getHistory(scheduleId: string): Promise<ScheduleHistory[]> {
-    return this.historyRepo.find({
-      where: { schedule_id: scheduleId },
-      relations: ['changedBy'],
-      order: { changed_at: 'DESC' },
-    });
-  }
 }

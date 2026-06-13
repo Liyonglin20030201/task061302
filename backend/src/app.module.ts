@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ThrottlerModule } from '@nestjs/throttler';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
@@ -16,6 +16,9 @@ import { ScheduleChangesModule } from './modules/schedule-changes/schedule-chang
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { StatisticsModule } from './modules/statistics/statistics.module';
 import { AuditLogsModule } from './modules/audit-logs/audit-logs.module';
+import { IdempotencyInterceptor } from './common/interceptors/idempotency.interceptor';
+import { AuditInterceptor } from './common/interceptors/audit.interceptor';
+import { IdempotencyKey } from './database/entities/idempotency-key.entity';
 
 @Module({
   imports: [
@@ -33,6 +36,7 @@ import { AuditLogsModule } from './modules/audit-logs/audit-logs.module';
         synchronize: true,
       }),
     }),
+    TypeOrmModule.forFeature([IdempotencyKey]),
     ThrottlerModule.forRoot([{ ttl: 60000, limit: 30 }]),
     AuthModule,
     UsersModule,
@@ -49,6 +53,8 @@ import { AuditLogsModule } from './modules/audit-logs/audit-logs.module';
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_INTERCEPTOR, useClass: IdempotencyInterceptor },
+    { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },
   ],
 })
 export class AppModule {}

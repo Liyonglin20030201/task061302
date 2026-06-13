@@ -43,19 +43,10 @@ export class SchedulesController {
     @Query('teacherId') teacherId?: string,
     @Query('classId') classId?: string,
     @Query('roomId') roomId?: string,
-    @CurrentUser() user?: any,
   ) {
-    let effectiveTeacherId = teacherId;
-
-    // Non-admin users can only view schedules for their own teacher record
-    // Admin can view any teacher's schedule by passing teacherId filter
-    if (user?.role === 'teacher' && !teacherId) {
-      effectiveTeacherId = user.teacherId;
-    }
-
     const result = await this.schedulesService.findAll(pagination, {
       semester,
-      teacherId: effectiveTeacherId,
+      teacherId,
       classId,
       roomId,
     });
@@ -119,12 +110,5 @@ export class SchedulesController {
       excludeScheduleId: dto.excludeScheduleId,
     });
     return ApiResponse.success(conflicts);
-  }
-
-  @Get(':id/history')
-  @ApiOperation({ summary: 'Get schedule change history' })
-  async getHistory(@Param('id') id: string) {
-    const history = await this.schedulesService.getHistory(id);
-    return ApiResponse.success(history);
   }
 }

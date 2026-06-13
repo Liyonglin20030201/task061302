@@ -27,27 +27,13 @@ export default function CoursePlansPage() {
   const { data: classesData } = useQuery({ queryKey: ['classes'], queryFn: () => classesService.getAll() });
 
   const mutation = useMutation({
-    mutationFn: (values: any) => {
-      if (editing) {
-        return coursePlansService.update(editing.id, { ...values, version: editing.version });
-      }
-      return coursePlansService.create(values);
-    },
+    mutationFn: (values: any) => editing ? coursePlansService.update(editing.id, values) : coursePlansService.create(values),
     onSuccess: () => {
       message.success(editing ? '更新成功' : '创建成功');
       queryClient.invalidateQueries({ queryKey: ['course-plans'] });
       setOpen(false);
-      setEditing(null);
     },
-    onError: (err: any) => {
-      if (err?.code === 409 || err?.message?.includes('已被其他用户修改')) {
-        message.error('该记录已被其他用户修改，请刷新后重试');
-        queryClient.invalidateQueries({ queryKey: ['course-plans'] });
-        setOpen(false);
-      } else {
-        message.error(err?.message || '操作失败');
-      }
-    },
+    onError: (err: any) => message.error(err?.message || '操作失败'),
   });
 
   const deleteMutation = useMutation({
@@ -65,24 +51,13 @@ export default function CoursePlansPage() {
     { title: '课程', dataIndex: ['course', 'name'] },
     { title: '教师', dataIndex: ['teacher', 'name'] },
     { title: '班级', dataIndex: ['classEntity', 'name'], render: (v: any, r: any) => v || r.class?.name },
-    { title: '计划课时', dataIndex: 'planned_hours', render: (v: any, r: any) => v || r.plannedHours },
-    { title: '版本', dataIndex: 'version', width: 60 },
+    { title: '计划课时', dataIndex: 'plannedHours' },
     { title: '状态', dataIndex: 'status', render: (s: string) => <Tag color={statusMap[s]?.color}>{statusMap[s]?.text || s}</Tag> },
     ...(isAdmin ? [{
       title: '操作',
       render: (_: any, record: any) => (
         <Space>
-          <Button size="small" icon={<EditOutlined />} onClick={() => {
-            setEditing(record);
-            form.setFieldsValue({
-              semester: record.semester,
-              courseId: record.course?.id,
-              teacherId: record.teacher?.id,
-              classId: record.classEntity?.id || record.class?.id,
-              plannedHours: record.planned_hours || record.plannedHours,
-            });
-            setOpen(true);
-          }}>编辑</Button>
+          <Button size="small" icon={<EditOutlined />} onClick={() => { setEditing(record); form.setFieldsValue({ ...record, courseId: record.course?.id, teacherId: record.teacher?.id, classId: record.classEntity?.id || record.class?.id }); setOpen(true); }}>编辑</Button>
           <Popconfirm title="确认删除?" onConfirm={() => deleteMutation.mutate(record.id)}>
             <Button size="small" danger icon={<DeleteOutlined />}>删除</Button>
           </Popconfirm>
@@ -98,14 +73,14 @@ export default function CoursePlansPage() {
         {isAdmin && <Button type="primary" icon={<PlusOutlined />} onClick={() => { setEditing(null); form.resetFields(); setOpen(true); }}>新增计划</Button>}
       </div>
       <Table dataSource={plans} columns={columns} rowKey="id" loading={isLoading} />
-      <Modal title={editing ? '编辑计划' : '新增计划'} open={open} onCancel={() => { setOpen(false); setEditing(null); }} onOk={() => form.submit()} confirmLoading={mutation.isPending} width={600}>
+      <Modal title={editing ? '编辑计划' : '新增计划'} open={open} onCancel={() => setOpen(false)} onOk={() => form.submit()} confirmLoading={mutation.isPending} width={600}>
         <Form form={form} layout="vertical" onFinish={(v) => mutation.mutate(v)}>
           <Form.Item name="semester" label="学期" rules={[{ required: true }]}><Input placeholder="如: 2025-2026-1" /></Form.Item>
           <Form.Item name="courseId" label="课程" rules={[{ required: true }]}>
             <Select placeholder="选择课程" options={courses.map((c: any) => ({ value: c.id, label: c.name }))} />
           </Form.Item>
           <Form.Item name="teacherId" label="教师" rules={[{ required: true }]}>
-            <Select placeholder="选择教师" options={teachers.map((t: any) => ({ value: t.id, label: `${t.name} (${t.employeeNo || t.employee_no})` }))} />
+            <Select placeholder="选择教师" options={teachers.map((t: any) => ({ value: t.id, label: `${t.name} (${t.employeeNo})` }))} />
           </Form.Item>
           <Form.Item name="classId" label="班级" rules={[{ required: true }]}>
             <Select placeholder="选择班级" options={classes.map((c: any) => ({ value: c.id, label: c.name }))} />

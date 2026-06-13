@@ -1,4 +1,4 @@
-import { Entity, Column, ManyToOne, JoinColumn, VersionColumn } from 'typeorm';
+import { Entity, Column, ManyToOne, JoinColumn } from 'typeorm';
 import { BaseEntity } from './base.entity';
 import { Course } from './course.entity';
 import { Teacher } from './teacher.entity';
@@ -41,7 +41,4 @@ export class CoursePlan extends BaseEntity {
     comment: '状态: draft/approved/scheduled',
   })
   status: PlanStatus;
-
-  @VersionColumn({ comment: '乐观锁版本号' })
-  version: number;
 }
